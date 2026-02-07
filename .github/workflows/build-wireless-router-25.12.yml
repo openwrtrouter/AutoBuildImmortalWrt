@@ -529,7 +529,7 @@ jobs:
 
       - name: Set executable permissions
         run: |
-          chmod +x ${{ github.workspace }}/mediatek-filogic/build24.sh
+          chmod +x ${{ github.workspace }}/mediatek-filogic/build25.sh
       
       - name: Save Custom Router IP into OpenWrt files
         run: |
