@@ -18,38 +18,59 @@ echo "📦 Checking packages directory:"
 ls -lah /home/build/immortalwrt/packages/
 
 # -------------------------------------------------------------------------
-# [适配 25.12 核心修复]
+# [适配 25.12 核心修复 V2]
+# 1. 修复 apk 命令找不到的问题 (自动定位 staging_dir/host/bin)
+# 2. 生成索引
 # -------------------------------------------------------------------------
 echo "⚡️ Generating APK index for local packages..."
+
+# 寻找 apk 二进制文件的路径
+# ImageBuilder 的工具通常在 staging_dir/host/bin 下
+APK_BIN=""
+if [ -f "staging_dir/host/bin/apk" ]; then
+    APK_BIN="./staging_dir/host/bin/apk"
+else
+    # 如果标准路径找不到，尝试全目录搜索
+    echo "⚠️ 'apk' not found in standard location, searching..."
+    APK_BIN=$(find staging_dir -name apk -type f -executable | head -n 1)
+fi
+
+if [ -z "$APK_BIN" ]; then
+    echo "❌ Critical Error: Could not find 'apk' binary in ImageBuilder!"
+    echo "Listing staging_dir/host/bin for debugging:"
+    ls -R staging_dir/host/bin || echo "staging_dir not found"
+    exit 1
+else
+    echo "✅ Found apk binary at: $APK_BIN"
+fi
+
 if [ -d "/home/build/immortalwrt/packages" ]; then
     cd /home/build/immortalwrt/packages
     
-    # 强制删除旧索引（如果有）
+    # 强制删除旧索引
     rm -f packages.adb
     
-    # 检查是否有 ipk 文件
+    # 检查 ipk 文件数量
     count=$(ls *.ipk 2>/dev/null | wc -l)
     if [ "$count" != "0" ]; then
-        # 1. 生成索引 (注意：这里绝对不能加 --allow-untrusted)
-        apk index -o packages.adb *.ipk
+        # 使用找到的绝对路径执行索引生成
+        # 注意：这里不加 --allow-untrusted
+        $APK_BIN index -o packages.adb *.ipk
         
-        # 2. 检查索引是否生成成功
         if [ -f "packages.adb" ]; then
-            echo "✅ APK index (packages.adb) generated successfully. Size: $(du -h packages.adb | cut -f1)"
+            echo "✅ APK index generated successfully."
         else
-            echo "❌ Error: 'apk index' command failed to create packages.adb!"
-            # 尝试打印 apk 版本以调试
-            apk --version
+            echo "❌ Error: Failed to generate packages.adb"
             exit 1
         fi
     else
-        echo "⚠️ Warning: No .ipk files found in packages directory!"
+        echo "⚠️ Warning: No .ipk files found, skipping index."
     fi
     
-    # 3. 将本地目录注册为 apk 仓库
-    # 25.12 ImageBuilder 必须知道去哪里找这个 repo
+    # 注册本地源 (必须使用绝对路径)
+    # 这一步是为了让 ImageBuilder 后续的 make image 流程能找到这些包
     echo "/home/build/immortalwrt/packages" >> /etc/apk/repositories
-    echo "✅ Added local packages to /etc/apk/repositories"
+    echo "✅ Added local repo to /etc/apk/repositories"
     
     cd - > /dev/null
 else
@@ -124,6 +145,10 @@ echo "$PACKAGES"
 # [适配 25.12]
 # 使用 APK_FLAGS="--allow-untrusted --force-broken-world"
 # -------------------------------------------------------------------------
+# 将找到的 APK_BIN 路径所在的目录加入 PATH，以防 make image 内部脚本也需要调用它
+APK_DIR=$(dirname "$APK_BIN")
+export PATH="$APK_DIR:$PATH"
+
 make image PROFILE=$PROFILE PACKAGES="$PACKAGES" FILES="/home/build/immortalwrt/files" APK_FLAGS="--allow-untrusted --force-broken-world"
 
 if [ $? -ne 0 ]; then
