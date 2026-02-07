@@ -2,6 +2,7 @@
 source shell/custom-packages.sh
 # 该文件实际为imagebuilder容器内的build.sh
 
+echo "build25"
 #echo "✅ 你选择了第三方软件包：$CUSTOM_PACKAGES"
 # 下载 run 文件仓库
 echo "🔄 正在同步第三方软件仓库 Cloning run file repo..."
