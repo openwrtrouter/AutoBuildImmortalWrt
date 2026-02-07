@@ -18,49 +18,54 @@ echo "📦 Checking packages directory:"
 ls -lah /home/build/immortalwrt/packages/
 
 # -------------------------------------------------------------------------
-# [适配 25.12 核心修复 V2]
-# 1. 修复 apk 命令找不到的问题 (自动定位 staging_dir/host/bin)
-# 2. 生成索引
+# [适配 25.12 核心修复 V3 - 修复库依赖]
+# 1. 自动定位 apk
+# 2. 注入 LD_LIBRARY_PATH 防止 apk 缺库报错
+# 3. 生成索引并捕获错误输出
 # -------------------------------------------------------------------------
 echo "⚡️ Generating APK index for local packages..."
 
-# 寻找 apk 二进制文件的路径
-# ImageBuilder 的工具通常在 staging_dir/host/bin 下
+# 1. 寻找 apk 二进制文件
 APK_BIN=""
 if [ -f "staging_dir/host/bin/apk" ]; then
     APK_BIN="./staging_dir/host/bin/apk"
 else
-    # 如果标准路径找不到，尝试全目录搜索
-    echo "⚠️ 'apk' not found in standard location, searching..."
     APK_BIN=$(find staging_dir -name apk -type f -executable | head -n 1)
 fi
 
 if [ -z "$APK_BIN" ]; then
     echo "❌ Critical Error: Could not find 'apk' binary in ImageBuilder!"
-    echo "Listing staging_dir/host/bin for debugging:"
-    ls -R staging_dir/host/bin || echo "staging_dir not found"
     exit 1
 else
     echo "✅ Found apk binary at: $APK_BIN"
 fi
 
+# 2. 设置动态库路径 (关键修复点)
+# ImageBuilder 的工具依赖 staging_dir/host/lib 下的库文件
+# 如果不设置这个，apk 会报 "error while loading shared libraries"
+export LD_LIBRARY_PATH="$(pwd)/staging_dir/host/lib:$LD_LIBRARY_PATH"
+echo "🔧 Set LD_LIBRARY_PATH to: $LD_LIBRARY_PATH"
+
+# 3. 生成索引
 if [ -d "/home/build/immortalwrt/packages" ]; then
     cd /home/build/immortalwrt/packages
     
-    # 强制删除旧索引
     rm -f packages.adb
     
-    # 检查 ipk 文件数量
     count=$(ls *.ipk 2>/dev/null | wc -l)
     if [ "$count" != "0" ]; then
-        # 使用找到的绝对路径执行索引生成
-        # 注意：这里不加 --allow-untrusted
-        $APK_BIN index -o packages.adb *.ipk
+        echo "   ... indexing $count packages"
         
-        if [ -f "packages.adb" ]; then
+        # 执行 apk index 并显示详细输出，如果失败打印 ldd 调试信息
+        $APK_BIN index -v -o packages.adb *.ipk
+        EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -eq 0 ] && [ -f "packages.adb" ]; then
             echo "✅ APK index generated successfully."
         else
-            echo "❌ Error: Failed to generate packages.adb"
+            echo "❌ Error: 'apk index' failed with code $EXIT_CODE"
+            echo "🔍 Debugging dependencies for apk binary:"
+            ldd $APK_BIN
             exit 1
         fi
     else
@@ -68,7 +73,6 @@ if [ -d "/home/build/immortalwrt/packages" ]; then
     fi
     
     # 注册本地源 (必须使用绝对路径)
-    # 这一步是为了让 ImageBuilder 后续的 make image 流程能找到这些包
     echo "/home/build/immortalwrt/packages" >> /etc/apk/repositories
     echo "✅ Added local repo to /etc/apk/repositories"
     
@@ -144,10 +148,10 @@ echo "$PACKAGES"
 # -------------------------------------------------------------------------
 # [适配 25.12]
 # 使用 APK_FLAGS="--allow-untrusted --force-broken-world"
+# 注入 PATH 以确保 make image 内部能找到 apk (双重保险)
 # -------------------------------------------------------------------------
-# 将找到的 APK_BIN 路径所在的目录加入 PATH，以防 make image 内部脚本也需要调用它
 APK_DIR=$(dirname "$APK_BIN")
-export PATH="$APK_DIR:$PATH"
+export PATH="$(pwd)/$APK_DIR:$PATH"
 
 make image PROFILE=$PROFILE PACKAGES="$PACKAGES" FILES="/home/build/immortalwrt/files" APK_FLAGS="--allow-untrusted --force-broken-world"
 
