@@ -63,6 +63,8 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-rtp2httpd luci-i18n-rtp2httpd-zh-cn"
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-vlmcsd luci-i18n-vlmcsd-zh-cn"
 #  UDPXY
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES udpxy luci-app-udpxy luci-i18n-udpxy-zh-cn"
+#  ddns-go
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES ddns-go luci-app-ddns-go luci-i18n-ddns-go-zh-cn"
 
 
 
