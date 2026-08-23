@@ -27,7 +27,7 @@ if [ -z "$CUSTOM_PACKAGES" ]; then
 else
   # ============= 同步第三方插件库==============
   # 同步第三方软件仓库run/apk
-  echo "🔄 正在同步第三方软件仓库 Cloning run file repo..."
+  echo "🔄 正在同步第三方软件仓库2 Cloning run file repo..."
   git clone --depth=1 https://github.com/openwrtrouter/apk.git /tmp/store-apk-repo
 
   # 拷贝 run/arm64 下所有 run 文件和apk文件 到 extra-packages 目录
